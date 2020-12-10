@@ -1,0 +1,21 @@
+{
+    "name": "strava_cli",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "start": "node index.js",
+        "dev": "nodemon index.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "axios": "^0.21.0",
+        "dayjs": "^1.9.6",
+        "dotenv": "^8.2.0",
+        "firebase-admin": "^9.4.1",
+        "mongoose": "^5.10.14"
+    }
+}
