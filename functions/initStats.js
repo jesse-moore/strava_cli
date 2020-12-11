@@ -4,11 +4,11 @@ const { connectMongoose, closeMongoose } = require('../mongoDB');
 
 (async () => {
     try {
-        await connectMongoose();
+        // await connectMongoose();
 		
 		
 		
-        await closeMongoose();
+        // await closeMongoose();
         return;
     } catch (error) {
         throw Error(error.message);
