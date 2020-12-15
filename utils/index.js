@@ -1,3 +1,3 @@
-const { parseActivities } = require('./validation');
+const { calcStats, makeStatID } = require('./calcStats');
 
-module.exports = { parseActivities };
+module.exports = { calcStats, makeStatID };

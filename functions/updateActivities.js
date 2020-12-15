@@ -1,48 +1,95 @@
 const axios = require('axios');
 require('../');
 const Activity = require('../mongoDB/models/activity');
+const Stat = require('../mongoDB/models/stat');
+const IndexMap = require('../mongoDB/models/indexMap');
 const { connectMongoose, closeMongoose } = require('../mongoDB');
 const { getAccessToken } = require('../helpers');
-const { parseActivities } = require('../utils');
+const { calcStats, makeStatID } = require('../utils');
 
 (async () => {
     try {
         await connectMongoose();
+        const indexMap = await IndexMap.findOne({ of: 'strava_id' });
         const accessToken = await getAccessToken();
-        let invalidEntriesCount = 0;
-        let insertedCount = 0;
-        let writeErrorsCount = 0;
-        let duplicatesCount = 0;
+        const newActivities = [];
         let page = 1;
         do {
             const activities = await fetchActivities(accessToken, page);
-            const { validEntries, invalidEntries } = parseActivities(
-                activities
-            );
-            invalidEntriesCount += invalidEntries.length;
-
-            const response = await insertManyActivities(validEntries);
-            insertedCount += response.insertedCount;
-            writeErrorsCount += response.writeErrors.length;
-            duplicatesCount += response.duplicates.length;
+            const { validActivities } = processActivities(activities, indexMap.index);
+            newActivities.push(...validActivities);
+            if (validActivities.length < activities.length) break;
             page++;
             await new Promise((resolve) => setTimeout(resolve, 2000));
-        } while (page < 10 && duplicatesCount === 0);
+        } while (page < 5);
+
+        const insertedCount = await insertManyActivities(newActivities);
+        await indexMap.save();
+        await updateStats(newActivities);
+
         await closeMongoose();
         console.log(`Inserted ${insertedCount} new activities`);
-        if (writeErrorsCount || invalidEntriesCount) {
-            console.log(`Error inserting ${writeErrorsCount} activities`);
-            console.log(`Error parsing ${invalidEntriesCount} activities`);
-        }
     } catch (error) {
+        await closeMongoose();
         console.error(error);
     }
 })();
 
+function processActivities(activities, index = new Map()) {
+    const validActivities = [];
+    const invalidActivities = [];
+    activities.forEach((activity) => {
+        if (typeof activity.id !== 'number' || index.has(activity.id.toString())) return;
+        activity.strava_id = activity.id;
+        const newActivity = new Activity(activity);
+        const error = newActivity.validateSync();
+        if (error) {
+            invalidActivities.push({ error: error.message, strava_id: newActivity.strava_id });
+        } else {
+            index.set(newActivity.strava_id.toString(), newActivity.id);
+            validActivities.push(newActivity);
+        }
+    });
+    return { validActivities, invalidActivities, index };
+}
+
+async function updateStats(activities) {
+    const stat_ids = activities
+        .map(({ year, month }) => {
+            return [makeStatID(year, month), makeStatID(year)];
+        })
+        .flat();
+
+    const findFilter = [...new Set(stat_ids), 0].map((stat_id) => {
+        return { stat_id };
+    });
+    const stats = await Stat.find({
+        $or: findFilter,
+    })
+        .populate('topActivities.distance', { distance: 1 })
+        .populate('topActivities.moving_time', { moving_time: 1 })
+        .populate('topActivities.total_elevation_gain', { total_elevation_gain: 1 })
+        .populate('topActivities.average_speed', { average_speed: 1 })
+        .populate('topActivities.elev_high', { elev_high: 1 })
+        .populate('topActivities.elev_low', { elev_low: 1 });
+
+    const statObj = {};
+    stats.forEach((stat) => {
+        statObj[stat.stat_id] = stat.toObject();
+    });
+    const newStats = calcStats(activities, statObj);
+
+    await Promise.all(
+        newStats.map(async (stat) => {
+            return await Stat.replaceOne({ stat_id: stat.stat_id }, stat, { upsert: true });
+        })
+    );
+}
+
 const baseURL = 'https://www.strava.com/api/v3/';
 
 async function fetchActivities(accessToken, page) {
-    const perPage = 30;
+    const perPage = 10;
     const url = `${baseURL}athlete/activities?per_page=${perPage}&page=${page}`;
     try {
         const response = await axios({
@@ -66,36 +113,10 @@ async function insertManyActivities(activities) {
     try {
         const response = await Activity.insertMany(activities, {
             ordered: false,
-            rawResult: true,
+            lean: true,
         });
-        const { insertedCount } = response;
-        return { insertedCount, writeErrors: [], duplicates: [] };
+        return response.length;
     } catch (error) {
-        const result = handleMongoError(error);
-        return result;
+        console.error(error.message);
     }
-}
-
-function handleMongoError(error) {
-    switch (error.name) {
-        case 'BulkWriteError':
-            const writeErrors = error.result.result.writeErrors.filter(
-                filterDuplicateIDErrors
-            );
-            const duplicates = error.result.result.writeErrors.filter(
-                (e) => !filterDuplicateIDErrors(e)
-            );
-            return {
-                duplicates,
-                writeErrors,
-                insertedCount: error.result.result.nInserted,
-            };
-        default:
-            throw new Error(`Error inserting documents ${error.message}`);
-    }
-}
-
-function filterDuplicateIDErrors(e) {
-    if (e.code === 11000) return false;
-    return true;
 }

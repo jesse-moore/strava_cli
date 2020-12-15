@@ -20,46 +20,50 @@ const statObj = {
     average_speed: 0,
 };
 
-function calcStats(activities) {
-    const stats = {
-        all: {
-            type: 'all',
-            year: null,
-            month: null,
-            daysOfWeek: Object.assign({}, daysOfWeek),
-            periodOfDay: Object.assign({}, periodOfDay),
-            topActivities: Object.assign({}),
-            ...statObj,
-        },
-    };
+const statsObj = {
+    0: {
+        type: 'all',
+        stat_id: 0,
+        year: null,
+        month: null,
+        daysOfWeek: Object.assign({}, daysOfWeek),
+        periodOfDay: Object.assign({}, periodOfDay),
+        topActivities: new Map(),
+        ...statObj,
+    },
+};
+
+function calcStats(activities, stats = statsObj) {
     activities.forEach((activity) => {
-        const date = dayjs(activity.start_date);
-        const year = date.year();
-        const month = date.month() + 1;
-        if (!stats[year])
-            stats[year] = {
+        const date = new Date(activity.start_date_local);
+        const year = date.getUTCFullYear();
+        const month = date.getUTCMonth() + 1;
+        if (!stats[makeStatID(year)])
+            stats[makeStatID(year)] = {
                 type: 'year',
+                stat_id: makeStatID(year),
                 month: null,
                 year,
                 daysOfWeek: Object.assign({}, daysOfWeek),
                 periodOfDay: Object.assign({}, periodOfDay),
-                topActivities: Object.assign({}),
+                topActivities: new Map(),
                 ...statObj,
             };
-        if (!stats[`${month}${year}`])
-            stats[`${month}${year}`] = {
+        if (!stats[makeStatID(year, month)])
+            stats[makeStatID(year, month)] = {
                 type: 'month',
+                stat_id: makeStatID(year, month),
                 year,
                 month,
                 daysOfWeek: Object.assign({}, daysOfWeek),
                 periodOfDay: Object.assign({}, periodOfDay),
-                topActivities: Object.assign({}),
+                topActivities: new Map(),
                 ...statObj,
             };
 
-        addActivityToStat(stats.all, activity);
-        addActivityToStat(stats[year], activity);
-        addActivityToStat(stats[`${month}${year}`], activity);
+        addActivityToStat(stats[0], activity);
+        addActivityToStat(stats[makeStatID(year)], activity);
+        addActivityToStat(stats[makeStatID(year, month)], activity);
     });
 
     const formattedStats = formatStats(stats);
@@ -76,8 +80,8 @@ function addActivityToStat(stat, activity) {
     stat.average_moving_time = stat.total_moving_time / stat.count;
     stat.average_speed = stat.total_distance / stat.total_moving_time;
 
-    const date = dayjs(activity.start_date);
-    const hour = date.hour();
+    const date = new Date(activity.start_date_local);
+    const hour = date.getUTCHours();
     if (hour < 3) stat.periodOfDay.night++;
     else if (hour < 7) stat.periodOfDay.earlyMorning++;
     else if (hour < 12) stat.periodOfDay.morning++;
@@ -85,7 +89,7 @@ function addActivityToStat(stat, activity) {
     else if (hour < 21) stat.periodOfDay.evening++;
     else if (hour >= 21) stat.periodOfDay.night++;
 
-    const dayOfWeek = date.day();
+    const dayOfWeek = date.getUTCDay() + 1;
     stat.daysOfWeek[dayOfWeek]++;
 
     const topActivityMetrics = [
@@ -108,31 +112,35 @@ function calcTopActivities(stat, activity, metric) {
     const metricValue = activity[key];
     if (!metricValue || metricValue === null) return;
 
-    if (stat.topActivities[key]) {
-        stat.topActivities[key].push({
-            _id: activity._id,
-            [key]: metricValue,
-        });
-        if (measure === 'highest') {
-            stat.topActivities[key].sort((a, b) => {
-                return b[key] - a[key];
-            });
-        } else if (measure === 'lowest') {
-            stat.topActivities[key].sort((a, b) => {
-                return a[key] - b[key];
-            });
-        }
-
-        if (stat.topActivities[key].length > 5) {
-            stat.topActivities[key].pop();
-        }
-    } else {
-        stat.topActivities[key] = [
+    if (stat.topActivities.has(key)) {
+        const newArr = [
+            ...stat.topActivities.get(key),
             {
                 _id: activity._id,
                 [key]: metricValue,
             },
         ];
+        if (measure === 'highest') {
+            newArr.sort((a, b) => {
+                return b[key] - a[key];
+            });
+        } else if (measure === 'lowest') {
+            newArr.sort((a, b) => {
+                return a[key] - b[key];
+            });
+        }
+
+        if (newArr.length > 5) {
+            newArr.pop();
+        }
+        stat.topActivities.set(key, newArr);
+    } else {
+        stat.topActivities.set(key, [
+            {
+                _id: activity._id,
+                [key]: metricValue,
+            },
+        ]);
     }
 }
 
@@ -140,9 +148,10 @@ function formatStats(stats) {
     const statsArray = [];
     for (const key in stats) {
         const stat = stats[key];
-        for (const key in stat.topActivities) {
-            stat.topActivities[key] = stat.topActivities[key].map(
-                (activity) => activity._id
+        for (const key of stat.topActivities.keys()) {
+            stat.topActivities.set(
+                key,
+                stat.topActivities.get(key).map((activity) => activity._id)
             );
         }
         statsArray.push(stat);
@@ -150,4 +159,16 @@ function formatStats(stats) {
     return statsArray;
 }
 
-module.exports = { calcStats };
+function makeStatID(year, month) {
+    if (year && month) {
+        if (month < 10) {
+            return Number(`${year}0${month}`);
+        } else {
+            return Number(`${year}${month}`);
+        }
+    } else {
+        return Number(year) * 100;
+    }
+}
+
+module.exports = { calcStats, makeStatID };

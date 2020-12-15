@@ -1,7 +1,9 @@
+const { number } = require('joi');
 const { Schema, model } = require('mongoose');
 
 const statSchema = new Schema({
     type: String,
+    stat_id: { type: Number, unique: true },
     year: Number,
     month: Number,
     daysOfWeek: {

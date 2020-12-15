@@ -1,36 +1,47 @@
 const axios = require('axios');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+dayjs.extend(utc);
 require('../');
 const Activity = require('../mongoDB/models/activity');
+const IndexMap = require('../mongoDB/models/indexMap');
 const { connectMongoose, closeMongoose } = require('../mongoDB');
 const { getAccessToken } = require('../helpers');
-const { parseActivities } = require('../utils');
 
 (async () => {
     try {
         const activities = await fetchActivitiesFromStrava();
-        const { validEntries, invalidEntries } = parseActivities(activities);
-        console.log(
-            `Found ${validEntries.length} valid activities and ${invalidEntries.length} invalid activities`
-        );
         await connectMongoose();
-        const {
-            writeErrors,
-            insertedCount,
-            duplicates,
-        } = await insertManyActivities(validEntries);
+        const { validActivities, index } = processActivities(activities);
+        await new IndexMap({ of: 'strava_id', index }).save();
+        const { insertedCount } = await insertManyActivities(validActivities);
         await closeMongoose();
-        console.log(
-            `Inserted ${insertedCount} activities and found ${duplicates.length} duplicate activities`
-        );
-        if (writeErrors.length) {
-            console.log(`Error inserting ${writeErrors.length} activities`);
-        }
+        console.log(`Inserted ${insertedCount} activities`);
     } catch (error) {
+        await closeMongoose();
         console.error(error);
     }
 })();
 
 const baseURL = 'https://www.strava.com/api/v3/';
+
+function processActivities(activities, index = new Map()) {
+    const validActivities = [];
+    const invalidActivities = [];
+    activities.forEach((activity) => {
+        if (typeof activity.id !== 'number' || index.has(activity.id.toString())) return;
+        activity.strava_id = activity.id;
+        const newActivity = new Activity(activity);
+        const error = newActivity.validateSync();
+        if (error) {
+            invalidActivities.push({ error: error.message, strava_id: newActivity.strava_id });
+        } else {
+            index.set(newActivity.strava_id.toString(), newActivity.id);
+            validActivities.push(newActivity);
+        }
+    });
+    return { validActivities, invalidActivities, index };
+}
 
 async function fetchActivitiesFromStrava() {
     const accessToken = await getAccessToken();
@@ -71,36 +82,12 @@ async function insertManyActivities(activities) {
     try {
         const response = await Activity.insertMany(activities, {
             ordered: false,
-            rawResult: true,
+            lean: true,
         });
-        const { insertedCount } = response;
-        return { insertedCount, writeErrors: [], duplicates: [] };
+        const insertedCount = response.length;
+        return { insertedCount };
     } catch (error) {
-        const result = handleMongoError(error);
-        return result;
+        console.error(error.name);
+        console.error(error.message);
     }
-}
-
-function handleMongoError(error) {
-    switch (error.name) {
-        case 'BulkWriteError':
-            const writeErrors = error.result.result.writeErrors.filter(
-                filterDuplicateIDErrors
-            );
-            const duplicates = error.result.result.writeErrors.filter(
-                (e) => !filterDuplicateIDErrors(e)
-            );
-            return {
-                duplicates,
-                writeErrors,
-                insertedCount: error.result.result.nInserted,
-            };
-        default:
-            throw new Error(`Error inserting documents ${error.message}`);
-    }
-}
-
-function filterDuplicateIDErrors(e) {
-    if (e.code === 11000) return false;
-    return true;
 }

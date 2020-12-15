@@ -11,8 +11,9 @@ const { calcStats } = require('../utils/calcStats');
         const stats = calcStats(activities);
         const response = await Stat.insertMany(stats);
         await closeMongoose();
-        console.log(response);
+        console.log(`Inserted ${response.length} stat objects`);
     } catch (error) {
-        throw Error(error.message);
+        await closeMongoose();
+        console.error(error.message);
     }
 })();
