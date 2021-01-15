@@ -9,7 +9,7 @@ const { calcStats, makeStatID } = require('../utils');
 
 (async () => {
     try {
-        await connectMongoose();
+        await connectMongoose('production');
         const indexMap = await IndexMap.findOne({ of: 'strava_id' });
         const accessToken = await getAccessToken();
         const newActivities = [];

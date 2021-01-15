@@ -12,10 +12,12 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "@mapbox/polyline": "^1.1.1",
         "axios": "^0.21.0",
         "dayjs": "^1.9.6",
         "dotenv": "^8.2.0",
         "firebase-admin": "^9.4.1",
+        "gpx-parse": "^0.10.4",
         "joi": "^17.3.0",
         "mongoose": "^5.10.14"
     }

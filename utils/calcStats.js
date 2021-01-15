@@ -1,6 +1,6 @@
 const dayjs = require('dayjs');
 
-const daysOfWeek = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+const daysOfWeek = { mo: 0, tu: 0, we: 0, th: 0, fr: 0, sa: 0, su: 0 };
 const periodOfDay = {
     earlyMorning: 0,
     morning: 0,
@@ -35,6 +35,7 @@ const statsObj = {
 
 function calcStats(activities, stats = statsObj) {
     activities.forEach((activity) => {
+        if (activity.type !== 'Run' && activity.type !== 'VirtualRun') return;
         const date = new Date(activity.start_date_local);
         const year = date.getUTCFullYear();
         const month = date.getUTCMonth() + 1;
@@ -89,7 +90,7 @@ function addActivityToStat(stat, activity) {
     else if (hour < 21) stat.periodOfDay.evening++;
     else if (hour >= 21) stat.periodOfDay.night++;
 
-    const dayOfWeek = date.getUTCDay() + 1;
+    const dayOfWeek = dayjs(date).format('dd').toLowerCase();
     stat.daysOfWeek[dayOfWeek]++;
 
     const topActivityMetrics = [

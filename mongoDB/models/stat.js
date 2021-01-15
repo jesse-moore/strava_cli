@@ -1,4 +1,3 @@
-const { number } = require('joi');
 const { Schema, model } = require('mongoose');
 
 const statSchema = new Schema({
@@ -7,13 +6,13 @@ const statSchema = new Schema({
     year: Number,
     month: Number,
     daysOfWeek: {
-        1: Number,
-        2: Number,
-        3: Number,
-        4: Number,
-        5: Number,
-        6: Number,
-        7: Number,
+        mo: Number,
+        tu: Number,
+        we: Number,
+        th: Number,
+        fr: Number,
+        sa: Number,
+        su: Number,
     },
     periodOfDay: {
         earlyMorning: Number,

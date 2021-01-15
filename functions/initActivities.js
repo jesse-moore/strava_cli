@@ -11,7 +11,7 @@ const { getAccessToken } = require('../helpers');
 (async () => {
     try {
         const activities = await fetchActivitiesFromStrava();
-        await connectMongoose();
+        await connectMongoose('production');
         const { validActivities, index } = processActivities(activities);
         await new IndexMap({ of: 'strava_id', index }).save();
         const { insertedCount } = await insertManyActivities(validActivities);
@@ -53,12 +53,12 @@ async function fetchActivitiesFromStrava() {
         activitiesArray.push(...activities);
         page++;
         await new Promise((resolve) => setTimeout(resolve, 2000));
-    } while (page < 1);
+    } while (page < 10);
     return activitiesArray;
 }
 
 async function fetchActivities(accessToken, page) {
-    const perPage = 2;
+    const perPage = 200;
     const url = `${baseURL}athlete/activities?per_page=${perPage}&page=${page}`;
     try {
         const response = await axios({
