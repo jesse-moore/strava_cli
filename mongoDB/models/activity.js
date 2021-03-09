@@ -1,7 +1,6 @@
 const { Schema, model } = require('mongoose');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
-const { func } = require('joi');
 dayjs.extend(utc);
 
 const latlngSchema = new Schema({
@@ -17,6 +16,28 @@ const mapSchema = new Schema({
     polyline: { type: String, maxlength: 100000, default: null },
 });
 
+const weatherSchema = new Schema({
+    _id: false,
+    windDirection: Number,
+    cloudCover: Number,
+    minTemp: Number,
+    maxTemp: Number,
+    precip: Number,
+    solarRadiation: Number,
+    dewPoint: Number,
+    humidity: Number,
+    visibility: Number,
+    windSpeed: Number,
+    heatIndex: Number,
+    snowDepth: Number,
+    maxPressure: Number,
+    minPressure: Number,
+    snow: Number,
+    windGust: Number,
+    conditions: [String],
+    windChill: Number,
+});
+
 const activitySchema = new Schema({
     name: { type: String, default: 'Unknown Name' },
     distance: { type: Number, max: 1000000, default: 0 },
@@ -25,7 +46,7 @@ const activitySchema = new Schema({
     total_elevation_gain: { type: Number, max: 1000000, default: 0 },
     type: { type: String, default: null },
     workout_type: { type: Number, max: 1000000, default: null },
-    strava_id: { type: Number, max: 999999999999, required: true, index: true },
+    strava_id: { type: Number, max: 999999999999, required: true, index: true, unique: true },
     utc_offset: { type: Number, min: -86400, max: 86400, default: null, set: (o) => o / 60 },
     start_date: { type: Date, required: true },
     start_date_local: { type: Date, required: true },
@@ -48,6 +69,7 @@ const activitySchema = new Schema({
         min: 2000,
         required: true,
     },
+    weather: { type: weatherSchema, default: null },
 });
 
 function transformLatLng(latLng) {

@@ -29,4 +29,16 @@ const saveNewToken = async (newTokenData) => {
     await adminRef.set(newTokenData);
 };
 
-module.exports = { db, getStravaAccessToken, saveNewToken };
+const addIDToQueue = async (id) => {
+    const docRef = db.collection('admin').doc('stravaQueue');
+    const addIds = Array.isArray(id) ? id : [id];
+    try {
+        await docRef.update({
+            ids: admin.firestore.FieldValue.arrayUnion(...addIds),
+        });
+    } catch (error) {
+        throw new Error(`Failed to add id(s): ${id} to idQueue\n${error.message}`);
+    }
+};
+
+module.exports = { db, getStravaAccessToken, saveNewToken, addIDToQueue };
